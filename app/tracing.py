@@ -6,11 +6,16 @@ from contextlib import contextmanager
 from typing import Any
 
 _orig_getaddrinfo = socket.getaddrinfo
+os.environ.setdefault("LANGFUSE_TIMEOUT", "20")
+os.environ.setdefault("OTEL_EXPORTER_OTLP_TIMEOUT", "20000")
 
 
 def _fast_getaddrinfo(host: Any, port: Any, *args: Any, **kwargs: Any):
     results = _orig_getaddrinfo(host, port, *args, **kwargs)
     if host == "cloud.langfuse.com":
+        preferred = [r for r in results if r[4][0] == "40.180.110.56"]
+        if preferred:
+            return preferred
         fast = [r for r in results if r[4][0] != "54.154.141.85"]
         if fast:
             return fast
