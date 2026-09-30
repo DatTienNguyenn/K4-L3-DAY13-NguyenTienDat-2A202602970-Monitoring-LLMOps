@@ -4,13 +4,13 @@
 
 ## 1. Thông tin học viên
 
-- **Họ và tên:**
-- **MSSV:**
+- **Họ và tên:** Nguyễn Tiến Đạt
+- **MSSV:** 2A202602970
 - **Lớp:** K4-L3B
-- **Repository URL:**
+- **Repository URL:** https://github.com/DatTienNguyenn/K4-L3-DAY13-NguyenTienDat-2A202602970-Monitoring-LLMOps
 - **Commit SHA cuối:**
 - **Challenge ID:**
-- **Tên project Langfuse cá nhân:** `day13-k4-l3b-<MSSV>`
+- **Tên project Langfuse cá nhân:** `day13-k4-l3b-2A202602970`
 
 ## 2. Evidence index
 
@@ -37,13 +37,13 @@
 
 | Nội dung | Baseline | Kết quả cuối | Nhận xét |
 |---|---|---|---|
-| `validate_logs.py` | | | |
-| `validate_dashboard.py` | | | |
-| `pytest` | | | |
-| Số traces hợp lệ | | | |
-| Số PII leak | | | |
-| Latency P95 / TTFT P95 | | | |
-| Retrieval success rate | | | |
+| `validate_logs.py` | 30/100 (21 records, 20 missing required fields & enrichment, 0 unique correlation IDs) | | |
+| `validate_dashboard.py` | HỢP LỆ: 6/6 panel có trong dashboard contract | | |
+| `pytest` | 22 passed in 1.00s | | |
+| Số traces hợp lệ | 10 traces (từ `load_test.py`) | | |
+| Số PII leak | 0 | | |
+| Latency P95 / TTFT P95 | 2126.0ms / 50.0ms | | |
+| Retrieval success rate | 100% (10/10 requests `tool_success=True`) | | |
 
 ## 4. Logging và PII
 
