@@ -18,9 +18,9 @@
 
 | Evidence | Đường dẫn |
 |---|---|
-| Pytest cuối | `evidence/01-pytest.txt` |
-| Log validator | `evidence/02-log-validator.txt` |
-| Dashboard validator | `evidence/03-dashboard-validator.txt` |
+| Pytest cuối | `evidence/01-pytest.png` (`evidence/01-pytest.txt`) |
+| Log validator | `evidence/02-log-validator.png` (`evidence/02-log-validator.txt`) |
+| Dashboard validator | `evidence/03-dashboard-validator.png` (`evidence/03-dashboard-validator.txt`) |
 | Structured log | `evidence/04-structured-log.png` |
 | PII redaction | `evidence/05-pii-redaction.png` |
 | Trace list | `evidence/06-trace-list.png` |
