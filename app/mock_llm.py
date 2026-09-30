@@ -3,8 +3,11 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from .incidents import STATE
+from .pii import summarize_text
+from .tracing import get_langfuse_client, observe
 
 
 @dataclass
@@ -25,7 +28,8 @@ class FakeLLM:
     def __init__(self, model: str = "claude-sonnet-4-5") -> None:
         self.model = model
 
-    def generate(self, prompt: str) -> FakeResponse:
+    @observe(name="generation", as_type="generation", capture_input=False, capture_output=False)
+    def generate(self, prompt: str, *, managed_prompt: Any | None = None) -> FakeResponse:
         started = time.perf_counter()
         time.sleep(0.05)  # mô phỏng thời điểm token đầu tiên sẵn sàng
         ttft_ms = int((time.perf_counter() - started) * 1000)
@@ -38,9 +42,34 @@ class FakeLLM:
             "Starter answer. You should improve this output logic and add better quality checks. "
             "Use retrieved context and keep responses concise."
         )
+        input_cost = round((input_tokens / 1_000_000) * 3, 6)
+        output_cost = round((output_tokens / 1_000_000) * 15, 6)
+        total_cost = round(input_cost + output_cost, 6)
+        client = get_langfuse_client()
+        if hasattr(client, "update_current_generation"):
+            client.update_current_generation(
+                model=self.model,
+                prompt=managed_prompt,
+                usage_details={
+                    "input": input_tokens,
+                    "output": output_tokens,
+                    "total": input_tokens + output_tokens,
+                },
+                cost_details={
+                    "input": input_cost,
+                    "output": output_cost,
+                    "total": total_cost,
+                },
+                metadata={
+                    "prompt_preview": summarize_text(prompt),
+                    "answer_preview": summarize_text(answer),
+                    "ttft_ms": ttft_ms,
+                },
+            )
         return FakeResponse(
             text=answer,
             usage=FakeUsage(input_tokens, output_tokens),
             model=self.model,
             ttft_ms=ttft_ms,
         )
+

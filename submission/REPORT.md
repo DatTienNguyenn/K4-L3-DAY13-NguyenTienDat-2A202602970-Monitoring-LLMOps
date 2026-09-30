@@ -25,9 +25,9 @@
 | PII redaction | `evidence/05-pii-redaction.png` |
 | Trace list | `evidence/06-trace-list.png` |
 | Trace waterfall | `evidence/07-trace-waterfall.png` |
-| Trace metadata | `evidence/08-trace-metadata.png` |
+| Trace metadata | `evidence/08-a.png`, `evidence/08-b.png` |
 | Prompt versions | `evidence/09-prompt-versions.png` |
-| Prompt rollback | `evidence/10-prompt-rollback.png` |
+| Prompt rollback | `evidence/10-a.png`, `evidence/10-b.png` |
 | Dashboard runtime | `evidence/11-dashboard-overview.png` |
 | Incident metric | `evidence/12-incident-metric.png` |
 | Incident log | `evidence/13-incident-log.png` |
@@ -37,13 +37,13 @@
 
 | Nội dung | Baseline | Kết quả cuối | Nhận xét |
 |---|---|---|---|
-| `validate_logs.py` | 30/100 (21 records, 20 missing required fields & enrichment, 0 unique correlation IDs) | 100/100 (21 records, 0 missing required fields & enrichment, 10 unique correlation IDs, 0 PII leaks) | Đạt 100/100 sau khi hoàn thiện CP1 |
-| `validate_dashboard.py` | HỢP LỆ: 6/6 panel có trong dashboard contract | HỢP LỆ: 6/6 panel có trong dashboard contract | Đủ 6 panel chuẩn |
-| `pytest` | 22 passed in 1.00s | 24 passed in 1.02s | Bổ sung 2 test cho CCCD và thẻ thanh toán |
-| Số traces hợp lệ | 10 traces (từ `load_test.py`) | | |
+| `validate_logs.py` | 30/100 (21 records, 20 missing required fields & enrichment, 0 unique correlation IDs) | 100/100 (82 records, 0 missing required fields & enrichment, 34 unique correlation IDs, 0 PII leaks) | Đạt 100/100 sau khi hoàn thiện CP1 |
+| `validate_dashboard.py` | HỢP LỆ: 6/6 panel có trong dashboard contract | HỢP LỆ: 6/6 panel có trong dashboard contract | Đủ 6 panel chuẩn kèm biểu đồ SVG + threshold |
+| `pytest` | 22 passed in 1.00s | 24 passed in 1.01s | Bổ sung 2 test cho CCCD và thẻ thanh toán |
+| Số traces hợp lệ | 10 traces (từ `load_test.py`) | > 25 traces hợp lệ có đủ cây `lab-agent-run` -> `retrieval` + `generation` | Đầy đủ metadata, prompt link, usage & cost |
 | Số PII leak | 0 | 0 | `scrub_event` chạy trước khi ghi JSONL |
-| Latency P95 / TTFT P95 | 2126.0ms / 50.0ms | | |
-| Retrieval success rate | 100% (10/10 requests `tool_success=True`) | | |
+| Latency P95 / TTFT P95 | 2126.0ms / 50.0ms | 1172.0ms / 50.0ms | Đạt trong ngưỡng SLO `<= 3000ms` |
+| Retrieval success rate | 100% (10/10 requests `tool_success=True`) | 100.0% | Tính trên toàn bộ event có `tool_success` |
 
 ## 4. Logging và PII
 
@@ -54,23 +54,39 @@
 
 ## 5. Tracing và prompt versioning
 
-- **Cách xác nhận traces do chính tôi tạo trong project cá nhân:**
+- **Cách xác nhận traces do chính tôi tạo trong project cá nhân:** Kiểm tra trong project Langfuse cá nhân `day13-k4-l3b-2A202602970` (`projectId: cmunhtdw70hcxad0cz02lsbh8`), đối chiếu `correlation_id` trong `metadata` của trace với `correlation_id` trong `data/logs.jsonl` của máy local.
 - **Cấu trúc root/retrieval/generation observations:**
-- **Cách nối trace với log:**
-- **Prompt name:**
-- **Version/label baseline:**
-- **Version/label candidate:**
+  - Trace root: `day13-agent-request`
+  - Root observation: `lab-agent-run` (type `AGENT`, gắn metadata `correlation_id`, `prompt_name`, `prompt_label`, `prompt_version`, `prompt_source`, `doc_count`, `query_preview`)
+  - Child observation 1: `retrieval` (type `RETRIEVER`, gắn `query_preview`, `doc_count`, `capture_input=False`, `capture_output=False`)
+  - Child observation 2: `generation` (type `GENERATION`, gắn `model="claude-sonnet-4-5"`, `prompt=managed_prompt`, `usage_details` (`input`, `output`, `total`), `cost_details` (`input`, `output`, `total`), `metadata` an toàn, `capture_input=False`, `capture_output=False`)
+- **Cách nối trace với log:** Qua trường `metadata.correlation_id` (ví dụ `req-v1base01`, `req-v2cand01`) được truyền vào `propagate_attributes(metadata={"correlation_id": correlation_id, ...})` trong `LabAgent.run`, khớp 1-1 với trường `correlation_id` trong `data/logs.jsonl`.
+- **Prompt name:** `day13-chat` (type: `text`, giữ 3 biến `{{feature}}`, `{{docs}}`, `{{message}}`)
+- **Version/label baseline:** Version `1` — labels: `baseline`, `production`
+- **Version/label candidate:** Version `2` (thêm hướng dẫn trả lời ngắn gọn, bám sát tài liệu) — label: `candidate`
 - **Trace ID của mỗi version:**
-- **Cách promote và rollback `production`:**
+  - Version 1 (`label=baseline`, `correlation_id=req-v1base01`): `ecc12109e95ee1551b6db20376450f2f` (và `9a95eed38aa7f59de2332f51eb5fd111` cho `req-v1base02`)
+  - Version 2 (`label=candidate`, `correlation_id=req-v2cand01`): `3c15dee0b0939534ac424b81ce6b193f` (và `56010f34b4a0da53eeb11642c365031c` cho `req-v2cand02`)
+  - Promote `production` -> Version 2 (`correlation_id=req-prom0002`): `065c7793608bc049e0585a96ad738648`
+  - Rollback `production` -> Version 1 (`correlation_id=req-roll0002`): `7d5369d281610f8bb4c2c69d17f09930`
+- **Cách promote và rollback `production`:** Không cần sửa code ứng dụng; chỉ chuyển label `production` từ version `1` sang version `2` trên Langfuse (promote), restart/refresh cache và gửi request kiểm tra (`prompt_label=production`, `prompt_version=2`). Khi rollback, chuyển label `production` quay về version `1` trên Langfuse, restart và gửi request kiểm tra (`prompt_label=production`, `prompt_version=1`).
 
 ## 6. Dashboard, SLO và alerts
 
-- **Dashboard và sáu panel:**
-- **SLO và lý do chọn:**
-- **Cách tính error budget:**
-- **Ba alert và runbook tương ứng:**
+- **Dashboard và sáu panel:** Dựng tại endpoint `http://127.0.0.1:8000/dashboard` (`app/dashboard.py`), đọc dữ liệu trực tiếp từ `data/logs.jsonl`, cửa sổ mặc định 60 phút, tự refresh mỗi 30 giây, có biểu đồ SVG kèm đường threshold cho từng panel theo đúng `config/dashboard.yaml`:
+  1. `latency` (`ms`): Latency P50, P95, P99 và TTFT P95 (threshold `p95 <= 3000 ms`).
+  2. `traffic` (`requests_per_minute`): Tổng request và tốc độ request/phút (threshold `rate_per_minute >= 1`).
+  3. `errors` (`percent`): Error rate (`%`), breakdown theo `error_type`, và `tool_success_rate_pct` tính trên mọi event có trường `tool_success` (threshold `error_rate_pct <= 2%`).
+  4. `cost` (`usd`): Chi phí theo từng phút và tổng chi phí trong cửa sổ 60 phút (threshold `total <= 2.5 USD`).
+  5. `tokens` (`tokens`): Tổng `tokens_in` và `tokens_out` (threshold `sum_by_field <= 50000 tokens`).
+  6. `quality` (`score_0_to_1`): Trung bình `quality_score` (threshold `mean >= 0.75`).
+- **SLO và lý do chọn:** Chọn SLO `fast_successful_requests` (`config/slo.yaml`): **99.5%** các request (`event == "request_received"`) phải trả về thành công (`event == "response_sent"`) và có `latency_ms <= 3000ms` trong cửa sổ 28 ngày. Lý do: ở trạng thái baseline bình thường, P50 ~ 152ms, P95 ~ 1172ms–2126ms, TTFT P95 ~ 50ms, error rate = 0%; ngưỡng 3000ms tạo khoảng đệm hợp lý cho dao động mạng nhưng vẫn bắt được ngay khi bước RAG bị chậm (`rag_slow` cộng thêm 2500ms làm latency vượt >2600–3000ms) hoặc khi `tool_fail` gây lỗi 500.
+- **Cách tính error budget:** Với SLO `99.5%` trong 28 ngày, error budget là `100% - 99.5% = 0.5%`. Giả sử hệ thống phục vụ `10,000` requests trong 28 ngày thì số request tối đa được phép lỗi hoặc chậm hơn 3000ms là `10,000 × 0.5% = 50 requests`.
+- **Ba alert và runbook tương ứng:** (chi tiết trong [`config/alert_rules.yaml`](../config/alert_rules.yaml) và [`docs/alerts.md`](../docs/alerts.md)):
+  1. `HighLatencyP95` (`warning`, `duration: 5m`, Slack `#k4-l3b-alerts`, runbook `docs/alerts.md#alert-1`): kích hoạt khi `p95(latency_ms) > 3000` hoặc `p95(ttft_ms) > 500`.
+  2. `HighErrorRateOrRetrievalDegradation` (`critical`, `duration: 3m`, Slack `#k4-l3b-alerts`, runbook `docs/alerts.md#alert-2`): kích hoạt khi `error_rate_pct > 2%` hoặc `tool_success_rate_pct < 90%`.
+  3. `CostSpikeOrQualityDrop` (`warning`, `duration: 10m`, Slack `#k4-l3b-alerts`, runbook `docs/alerts.md#alert-3`): kích hoạt khi `sum_60m(cost_usd) > 2.5` hoặc `sum_60m(tokens_out) > 50000` hoặc `mean(quality_score) < 0.75`.
 
-> Ví dụ cách viết error budget: "SLO 99.5% trong 28 ngày nghĩa là error budget 0.5%. Nếu workload có 10,000 request thì tối đa 50 request được phép lỗi hoặc chậm hơn ngưỡng SLO."
 
 ## 7. Điều tra challenge
 

@@ -1,8 +1,23 @@
 from __future__ import annotations
 
 import os
+import socket
 from contextlib import contextmanager
 from typing import Any
+
+_orig_getaddrinfo = socket.getaddrinfo
+
+
+def _fast_getaddrinfo(host: Any, port: Any, *args: Any, **kwargs: Any):
+    results = _orig_getaddrinfo(host, port, *args, **kwargs)
+    if host == "cloud.langfuse.com":
+        fast = [r for r in results if r[4][0] != "54.154.141.85"]
+        if fast:
+            return fast
+    return results
+
+
+socket.getaddrinfo = _fast_getaddrinfo
 
 try:
     from langfuse import get_client, observe, propagate_attributes
