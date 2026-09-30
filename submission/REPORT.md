@@ -37,20 +37,20 @@
 
 | Nội dung | Baseline | Kết quả cuối | Nhận xét |
 |---|---|---|---|
-| `validate_logs.py` | 30/100 (21 records, 20 missing required fields & enrichment, 0 unique correlation IDs) | | |
-| `validate_dashboard.py` | HỢP LỆ: 6/6 panel có trong dashboard contract | | |
-| `pytest` | 22 passed in 1.00s | | |
+| `validate_logs.py` | 30/100 (21 records, 20 missing required fields & enrichment, 0 unique correlation IDs) | 100/100 (21 records, 0 missing required fields & enrichment, 10 unique correlation IDs, 0 PII leaks) | Đạt 100/100 sau khi hoàn thiện CP1 |
+| `validate_dashboard.py` | HỢP LỆ: 6/6 panel có trong dashboard contract | HỢP LỆ: 6/6 panel có trong dashboard contract | Đủ 6 panel chuẩn |
+| `pytest` | 22 passed in 1.00s | 24 passed in 1.02s | Bổ sung 2 test cho CCCD và thẻ thanh toán |
 | Số traces hợp lệ | 10 traces (từ `load_test.py`) | | |
-| Số PII leak | 0 | | |
+| Số PII leak | 0 | 0 | `scrub_event` chạy trước khi ghi JSONL |
 | Latency P95 / TTFT P95 | 2126.0ms / 50.0ms | | |
 | Retrieval success rate | 100% (10/10 requests `tool_success=True`) | | |
 
 ## 4. Logging và PII
 
-- **Cách tạo/nhận và truyền correlation ID:**
-- **Các metadata được ghi vào structured log:**
-- **Cách bảo đảm PII được scrub trước khi ghi:**
-- **Cách kiểm chứng kết quả:**
+- **Cách tạo/nhận và truyền correlation ID:** Trong `CorrelationIdMiddleware` (`app/middleware.py`), đầu mỗi request gọi `clear_contextvars()` để xóa context cũ, đọc header `x-request-id` (nếu không có thì tự sinh theo format `req-<8-char-hex>` bằng `uuid.uuid4().hex[:8]`), lưu vào `request.state.correlation_id`, gọi `bind_contextvars(correlation_id=correlation_id)` để gắn tự động vào mọi log, và gắn `x-request-id` cùng `x-response-time-ms` vào response headers.
+- **Các metadata được ghi vào structured log:** `ts`, `level`, `service`, `event`, `correlation_id`, kèm context enrichment được bind tại `/chat` (`user_id_hash`, `session_id`, `feature`, `model`, `env`) và các chỉ số vận hành tại `response_sent` (`latency_ms`, `ttft_ms`, `tokens_in`, `tokens_out`, `cost_usd`, `quality_score`, `tool_name`, `tool_success`, `payload`).
+- **Cách bảo đảm PII được scrub trước khi ghi:** Đăng ký processor `scrub_event` trong `structlog.configure` (`app/logging_config.py`) đứng trước `JsonlFileProcessor()` và `structlog.processors.JSONRenderer()`, kết hợp `summarize_text()` gọi `scrub_text()` để thay thế email, số điện thoại VN, CCCD 12 số và số thẻ thanh toán 16 số bằng chuỗi `[REDACTED_<TYPE>]`. User ID được băm một chiều bằng SHA-256 (`hash_user_id`).
+- **Cách kiểm chứng kết quả:** Chuyển file log cũ ra ngoài repo (`../logs-cp0-baseline.jsonl`), khởi động lại API, chạy `python scripts/load_test.py`, `python scripts/validate_logs.py` (đạt `100/100`, `Potential PII leaks detected: 0`, `Unique correlation IDs found: 10`) và chạy `python -m pytest -q` (`24 passed`).
 
 ## 5. Tracing và prompt versioning
 
